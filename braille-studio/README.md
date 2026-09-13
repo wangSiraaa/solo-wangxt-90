@@ -1,0 +1,74 @@
+# 无障碍出版工作室（braille-studio）
+
+本地编排盲文段落与简单触觉示意图的工作室应用。**全部计算在本地完成，不调用任何云服务。**
+
+- React + TypeScript：版面编辑
+- liblouis（WebAssembly/asm.js 本地构建）：按指定语言表转译盲文
+- Canvas：点阵预览
+- pdf-lib：导出真实尺寸 PDF
+- IndexedDB：工程保存
+
+## 运行
+
+```bash
+npm install        # 安装依赖；postinstall 自动把语言表复制到 public/liblouis/ 并生成 SHA-256 清单
+npm run dev        # 开发服务器
+npm test           # 18 个测试（真实 liblouis 转译 + 版面引擎 + PDF 导出）
+npm run build      # 生产构建（public/liblouis/ 随包分发，完全离线可用）
+```
+
+## 盲文转译：真实 liblouis，无替代算法
+
+转译由 liblouis 3.2.0 的 JS 构建（`liblouis`@0.4.0 + `liblouis-build`@3.2.0-rc，均为精确版本）执行。
+本项目**没有**手写任何"看似盲文"的映射算法；数字号、字母号、缩写（contraction）等规则全部来自语言表。
+
+- 输出经 `unicode.dis` 显示表转为 Unicode 盲文点位（U+2800–U+28FF），应用侧只做位运算画点。
+- 原文映射使用 `lou_translate` 的 `inputPos` 输出：每个盲文单元都能查看对应的原文字符（"原文映射"面板）。
+- 缩写规则可直接查看：规则面板展示随项目固定的表文件原文（`always`、`word`、`numsign` 等 opcode），支持搜索。
+- 注意：liblouis 0.4.0 的 easy-api `translateString` 输出缓冲区过小，数字扩展会导致堆溢出，因此本应用直接调用 `lou_translate` 并自行管理缓冲区（`src/braille/translator.ts`）。
+
+### 语言表版本固定
+
+1. `package.json` 使用精确版本（无版本区间）+ `package-lock.json`；
+2. `scripts/prepare-liblouis.mjs` 在 `npm install` 时把表文件（含 `include` 递归依赖）实体复制到 `public/liblouis/tables/`；
+3. 每个表文件的 SHA-256 写入 `public/liblouis/manifest.json`，应用内"表版本"面板可见，"自检"面板可重新校验哈希。
+
+随项目发布的表：`en-us-g1/g2.ctb`、`en-ueb-g1/g2.ctb`、`zh-chn.ctb`、`zh-hk.ctb`。
+（`zh-tw.ctb` 在该 liblouis 版本的 JS 构建下会触发运行时异常，故不发布。）
+
+## 版面工艺参数（示例值）
+
+定义于 `src/braille/spec.ts`，为通行 embosser 规格的**示例工艺参数**：
+
+| 参数 | 值 | 说明 |
+|---|---|---|
+| 点径 | 1.5 mm | 点的基准直径 |
+| 点距 | 2.5 mm | 单元内相邻点中心距 |
+| 单元距 | 6.0 mm | 行宽按盲文单元计（如 279mm 纸 → 42 单元/行） |
+| 行距 | 10.0 mm | |
+| 图形与点阵最小间距 | 6.0 mm | 图形行带高度 ≥ 图形高 + 2×间距，结构上保证 |
+| 页码保留 | 末行右对齐 | 与正文间留空行 |
+
+标题居中、前后空行；段落首行缩进 2 单元；图形独占整行带（带内无点阵，水平间距自然满足）；图注可跨页续排并在预览中标注。`validateLayout()` 对所有元素做包围盒重叠断言，应用内"自检"面板与测试均会执行。
+
+## 验证素材与一致性
+
+"载入验证样例"覆盖需求要求的三类素材：
+
+1. **长单词**：45+ 字符单词超出行宽（42 单元）→ 硬断行（盲文不随意加连字符，见"限制"）；
+2. **数字切换**：`Room 3B`、`A1B2C3`、`2026-09-13`、`95%` 等，数字号/字母号由表规则产生；
+3. **图注跨页**：样例图注超过一页可用行数，必然续排到下页并带续行标记。
+
+**预览与 PDF 点位一致**：Canvas 与 PDF 导出共用同一个 `layoutToDots()` 坐标源（`src/layout/engine.ts`），一致性由构造保证；测试另做确定性重算与真实 PDF 导出解析验证。
+
+## 限制
+
+- 长单词硬断行，未实现 liblouis `lou_hyphenate` 的断字点；
+- 图形为简单凸线图形（线/矩形/圆/折线），整行带占位，不支持图文混排环绕；
+- 无寡妇行/孤行控制；
+- 文本含表外字符（如英文表下的汉字）时，liblouis 会输出 `\xhhhh` 转义序列的点位——请切换到匹配的语言表。
+
+## 触读质量声明
+
+预览与 PDF 仅为**版面**参考。点高、纸张厚度与挺度、embosser 压力等均影响实际触感，
+**最终触读质量仍需在实际设备与纸张上打样确认**。

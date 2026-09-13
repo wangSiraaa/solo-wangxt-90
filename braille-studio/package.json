@@ -1,0 +1,31 @@
+{
+  "name": "braille-studio",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "本地无障碍出版工作室：盲文段落编排与简单触觉示意图（不调用云服务）",
+  "scripts": {
+    "postinstall": "node scripts/prepare-liblouis.mjs",
+    "prepare:liblouis": "node scripts/prepare-liblouis.mjs",
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "liblouis": "0.4.0",
+    "liblouis-build": "3.2.0-rc",
+    "pdf-lib": "1.17.1",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "@types/react": "18.3.12",
+    "@types/react-dom": "18.3.1",
+    "@vitejs/plugin-react": "4.3.4",
+    "typescript": "5.6.3",
+    "vite": "5.4.11",
+    "vitest": "2.1.8"
+  }
+}

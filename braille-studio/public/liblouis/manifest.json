@@ -1,0 +1,35 @@
+{
+  "liblouisVersion": "3.2.0",
+  "packages": {
+    "liblouis": "0.4.0",
+    "liblouis-build": "3.2.0-rc"
+  },
+  "displayTable": "unicode.dis",
+  "tables": [
+    "en-us-g1.ctb",
+    "en-us-g2.ctb",
+    "en-ueb-g1.ctb",
+    "en-ueb-g2.ctb",
+    "zh-chn.ctb",
+    "zh-hk.ctb"
+  ],
+  "files": {
+    "braille-patterns.cti": "5e24558303fa6db1642ee99dde12c43a42938edc7de26e87d09d4acfbeae6bbe",
+    "chardefs.cti": "fd534a325720e6ec2f7573ada7cd9a9be274f07d818223b58a616206fa57761c",
+    "en-ueb-chardefs.uti": "95f6068bde6e45103466045db98c68f84e537fd5689460aa2be059636732b3ea",
+    "en-ueb-g1.ctb": "3dbce878d0573651a3c1fab16358c84eb7d0e90c94f8a6a2b266ff0ddb7c1a4d",
+    "en-ueb-g2.ctb": "ebb84a24e17b71afd6b3f6e2569da1ca499b44b0a7e0129b4b5b9c0c4173e4aa",
+    "en-ueb-math.ctb": "d4fa2926bdc0e46fedf0f18e755b3c50a904e5e5b16b635eac88eff6a086f75d",
+    "en-us-comp8.ctb": "23194fbfa9cc2a4f771094aee830825128c44565b797c55815c4a949415dc29f",
+    "en-us-g1.ctb": "585d2e88b4a5d79b39845641f46a27e539521ff29e17de27011b983f67f53075",
+    "en-us-g2.ctb": "043a7b7a80c15c939c11b3595fa3f080b9997201972d4c333f0fe579c9f4cb40",
+    "latinLetterDef8Dots.uti": "7e8c1fc84b287f72c16262493f25a624e435a13b6abbafcf794c719ba3677ac7",
+    "litdigits6Dots.uti": "a1dd315ca4dbdfca04076368addd05f33213553e6ffa337a11daa0d7bc738889",
+    "loweredDigits6Dots.uti": "7dc6e70c78258c393dd7a8fad0280c3f0163621f051a3ac6b4ffc97f9ca49221",
+    "ukmaths_unicode_defs.cti": "45a41f83968bc7c656660955510ff96d0ac9d76027be233e3e92ea4e405dbfa0",
+    "unicode.dis": "eccd0df31bce67a449d73e227ede8a4c2d6de6438b5b6ba520b24d27b11331ab",
+    "zh-chn.ctb": "fc83a758a6e1a3dec2914a5e56a0c696ae5dd8fdd2dc8dda4759c5a0d5a8ea71",
+    "zh-hk.ctb": "3292808fd71dee33d2ee4b5503adeee614634fc4dc72c18fb0eac8f381b28c62"
+  },
+  "note": "表文件已随项目固定（精确依赖版本 + 文件实体 + SHA-256）。运行时仅从本地 public/liblouis/ 加载。"
+}
