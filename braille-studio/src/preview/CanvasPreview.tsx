@@ -114,8 +114,8 @@ export function CanvasPreview(p: PreviewProps) {
       if (!fig) continue;
       ctx.strokeStyle = '#111';
       ctx.lineWidth = 0.8 * scale;
-      const fx = (x: number) => X(pf.page, pf.xMm + x);
-      const fy = (y: number) => Y(pf.page, pf.yMm + y);
+      const fx = (x: number) => X(pf.page, pf.originXMm + x);
+      const fy = (y: number) => Y(pf.page, pf.originYMm + y);
       for (const s of fig.shapes) {
         ctx.beginPath();
         if (s.kind === 'line') {

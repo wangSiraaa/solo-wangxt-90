@@ -46,8 +46,8 @@ export async function exportPdf(layout: Layout, figures: Map<string, FigureSpec>
     const fig = figures.get(pf.blockId);
     if (!fig) continue;
     const page = pages[pf.page];
-    const fx = (x: number) => (pf.xMm + x) * MM_TO_PT;
-    const fy = (y: number) => toPdfY(pf.yMm + y);
+    const fx = (x: number) => (pf.originXMm + x) * MM_TO_PT;
+    const fy = (y: number) => toPdfY(pf.originYMm + y);
     for (const s of fig.shapes) {
       if (s.kind === 'line') {
         page.drawLine({ start: { x: fx(s.pts[0]), y: fy(s.pts[1]) }, end: { x: fx(s.pts[2]), y: fy(s.pts[3]) }, thickness: strokeW, color: ink });

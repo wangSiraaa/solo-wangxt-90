@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import type { Block, FigureSpec } from '../model/document';
 import { validateFigure } from '../model/document';
+import { applyFigureSize, applyShapesJson } from './figureEdit';
 
 export interface EditorProps {
   blocks: Block[];
@@ -8,46 +10,80 @@ export interface EditorProps {
   onChange(blocks: Block[]): void;
 }
 
+/**
+ * 图形编辑器：所有修改先经 applyFigureSize/applyShapesJson 校验，
+ * 越界或非法的输入被拒绝（只显示错误，不写入文档）。
+ */
 function FigureEditor({ fig, onChange }: { fig: FigureSpec; onChange(f: FigureSpec): void }) {
-  const err = validateFigure(fig);
+  const [wText, setWText] = useState(String(fig.widthMm));
+  const [hText, setHText] = useState(String(fig.heightMm));
+  const [json, setJson] = useState(JSON.stringify(fig.shapes));
+  const [error, setError] = useState<string | null>(null);
+
+  const trySize = (wText: string, hText: string) => {
+    const r = applyFigureSize(fig, Number(wText), Number(hText));
+    if (r.figure) {
+      setError(null);
+      onChange(r.figure);
+    } else {
+      setError(`尺寸被拒绝：${r.error}`);
+    }
+  };
+  const tryShapes = (text: string) => {
+    const r = applyShapesJson(fig, text);
+    if (r.figure) {
+      setError(null);
+      onChange(r.figure);
+    } else {
+      setError(`形状被拒绝：${r.error}`);
+    }
+  };
+
+  // 文档中当前图形自身的校验状态（例如打开了旧工程）
+  const currentError = validateFigure(fig);
+
   return (
     <div className="figure-editor">
       <label>
         宽 mm
         <input
           type="number"
-          value={fig.widthMm}
+          value={wText}
           min={5}
           max={250}
-          onChange={(e) => onChange({ ...fig, widthMm: Number(e.target.value) })}
+          onChange={(e) => {
+            setWText(e.target.value);
+            trySize(e.target.value, hText);
+          }}
         />
       </label>
       <label>
         高 mm
         <input
           type="number"
-          value={fig.heightMm}
+          value={hText}
           min={5}
           max={250}
-          onChange={(e) => onChange({ ...fig, heightMm: Number(e.target.value) })}
-        />
-      </label>
-      <label className="shapes-label">
-        形状（JSON：line [x1,y1,x2,y2] / rect [x,y,w,h] / circle [cx,cy,r] / polyline [x1,y1,…]）
-        <textarea
-          rows={4}
-          value={JSON.stringify(fig.shapes)}
           onChange={(e) => {
-            try {
-              const shapes = JSON.parse(e.target.value);
-              if (Array.isArray(shapes)) onChange({ ...fig, shapes });
-            } catch {
-              /* 输入中途的非法 JSON 不应用 */
-            }
+            setHText(e.target.value);
+            trySize(wText, e.target.value);
           }}
         />
       </label>
-      {err && <div className="error">{err}</div>}
+      <label className="shapes-label">
+        形状（JSON：line [x1,y1,x2,y2] / rect [x,y,w,h] / circle [cx,cy,r] / polyline [x1,y1,…]；
+        坐标须在 [0,0]–[{fig.widthMm},{fig.heightMm}]mm 内）
+        <textarea
+          rows={4}
+          value={json}
+          onChange={(e) => {
+            setJson(e.target.value);
+            tryShapes(e.target.value);
+          }}
+        />
+      </label>
+      {error && <div className="error">{error}</div>}
+      {!error && currentError && <div className="error">当前图形非法：{currentError}</div>}
     </div>
   );
 }
@@ -102,7 +138,7 @@ export function Editor({ blocks, selectedId, onSelect, onChange }: EditorProps) 
           </div>
           {b.kind === 'figure' ? (
             <>
-              <FigureEditor fig={b.figure} onChange={(figure) => update(b.id, { figure })} />
+              <FigureEditor key={b.id} fig={b.figure} onChange={(figure) => update(b.id, { figure })} />
               <textarea
                 rows={2}
                 value={b.caption}

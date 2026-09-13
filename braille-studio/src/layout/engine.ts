@@ -14,6 +14,7 @@ import type { BrailleSpec, PageGeometry } from '../braille/spec';
 import { BRAILLE_SPEC, cellX, computeGeometry, lineY, PAGE_PRESETS } from '../braille/spec';
 import { charToDots } from '../braille/dots';
 import type { Block, StudioDocument } from '../model/document';
+import { shapeBounds } from '../model/document';
 import type { Translation } from '../braille/translator';
 
 export type TranslateFn = (text: string, tableFile: string) => Translation;
@@ -42,11 +43,14 @@ export interface PlacedLine {
 export interface PlacedFigure {
   page: number;
   blockId: string;
-  /** 图形包围盒 mm（页面坐标） */
+  /** 实际图形（全部形状的联合包围盒）在页面上的位置与尺寸 mm —— 间距与重叠校验以此为准 */
   xMm: number;
   yMm: number;
   wMm: number;
   hMm: number;
+  /** 图形局部坐标原点 (0,0) 的页面位置 mm（绘制形状用） */
+  originXMm: number;
+  originYMm: number;
   /** 与点阵的最小间距 mm（示例工艺参数） */
   clearanceMm: number;
 }
@@ -152,23 +156,36 @@ export function layoutDocument(
     } else if (block.kind === 'paragraph') {
       emitWrapped(translate(block.text, doc.tableFile), block.id, 'body', 2);
     } else {
-      // 触觉图形：整行带占位，带高 ≥ 图形高 + 2×最小间距
+      // 触觉图形：整行带占位。占位与间距按**实际形状包围盒**计算（而非声明框），
+      // 带高 ≥ 实际图形高 + 2×最小间距；即使坐标越界（UI 会拒绝，但文档可能来自外部），
+      // 也按真实占用重排，保证间距正确。
       const clearance = spec.figureClearance;
-      const rows = Math.max(1, Math.ceil((block.figure.heightMm + 2 * clearance) / spec.linePitch));
+      const bounds = shapeBounds(block.figure) ?? {
+        minX: 0,
+        minY: 0,
+        maxX: block.figure.widthMm,
+        maxY: block.figure.heightMm,
+      };
+      const inkW = Math.max(0, bounds.maxX - bounds.minX);
+      const inkH = Math.max(0, bounds.maxY - bounds.minY);
+      const rows = Math.max(1, Math.ceil((inkH + 2 * clearance) / spec.linePitch));
       const caption = translate(block.caption, doc.tableFile);
       if (cur.line + rows > geo.contentLines) newPage(); // 图形整体移至下页
       const bandTopY = lineY(geo, cur.line, spec) - spec.dotPitch;
       const bandH = rows * spec.linePitch;
       const contentW = geo.cellsPerLine * spec.cellPitch;
-      const xMm = geo.originX + Math.max(0, (contentW - block.figure.widthMm) / 2);
-      const yMm = bandTopY + (bandH - block.figure.heightMm) / 2;
+      // 实际图形在行带内居中；局部原点按包围盒反推
+      const xMm = geo.originX + Math.max(0, (contentW - inkW) / 2);
+      const yMm = bandTopY + (bandH - inkH) / 2;
       figures.push({
         page: cur.page,
         blockId: block.id,
         xMm,
         yMm,
-        wMm: block.figure.widthMm,
-        hMm: block.figure.heightMm,
+        wMm: inkW,
+        hMm: inkH,
+        originXMm: xMm - bounds.minX,
+        originYMm: yMm - bounds.minY,
         clearanceMm: clearance,
       });
       for (let r = 0; r < rows; r++) advance();

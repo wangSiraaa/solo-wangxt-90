@@ -7,6 +7,7 @@ import { getManifest, getTableSource, translate } from '../braille/translator';
 import { raisedDots } from '../braille/dots';
 import { exportPdf } from '../export/pdf';
 import { PDFDocument } from 'pdf-lib';
+import { validateFigure } from '../model/document';
 import type { FigureSpec } from '../model/document';
 
 export interface InspectorProps {
@@ -148,7 +149,18 @@ function CheckView({ layout, figures, info, docName, tableFile }: { layout: Layo
       ok: violations.length === 0,
       detail: violations.length ? violations.slice(0, 5).join('；') : `${layout.pageCount} 页全部通过包围盒校验`,
     });
-    // 2. 预览与 PDF 点位一致（同一 layoutToDots 数据源 + 实际导出验证）
+    // 2. 图形坐标越界检查（UI 会拒绝越界输入；此处兜底检查来自外部的工程数据）
+    const badFigures = [...figures.entries()]
+      .map(([id, f]) => ({ id, err: validateFigure(f) }))
+      .filter((x) => x.err);
+    out.push({
+      name: '图形坐标在声明范围内',
+      ok: badFigures.length === 0,
+      detail: badFigures.length
+        ? badFigures.map((x) => `块 ${x.id}: ${x.err}`).join('；')
+        : `${figures.size} 个图形的形状均在声明范围内（间距按实际形状包围盒计算）`,
+    });
+    // 3. 预览与 PDF 点位一致（同一 layoutToDots 数据源 + 实际导出验证）
     try {
       const dotsA = layoutToDots(layout);
       const bytes = await exportPdf(layout, figures, { title: docName, tableFile, liblouisVersion: info.version });
@@ -165,7 +177,7 @@ function CheckView({ layout, figures, info, docName, tableFile }: { layout: Layo
     } catch (e: any) {
       out.push({ name: '预览与 PDF 点位一致', ok: false, detail: `导出失败: ${e.message}` });
     }
-    // 3. 表文件完整性（SHA-256 对照 manifest）
+    // 4. 表文件完整性（SHA-256 对照 manifest）
     try {
       const manifest = await getManifest();
       let allOk = true;
