@@ -3,9 +3,15 @@
  * 所有坐标均为 mm（图形内部坐标以图形左上角为原点）。
  */
 
+import type { OutputProfile } from './profile';
+import { defaultProfiles } from './profile';
+import type { Anchor } from './anchor';
+
 export type ShapeKind = 'line' | 'rect' | 'circle' | 'polyline';
 
 export interface Shape {
+  /** 稳定对象 ID（锚点绑定用）；缺失时由编辑器/迁移逻辑补齐 */
+  id?: string;
   kind: ShapeKind;
   /** line/polyline: 折点 [x1,y1,x2,y2,...]；rect: [x,y,w,h]；circle: [cx,cy,r] */
   pts: number[];
@@ -30,6 +36,10 @@ export interface StudioDocument {
   pagePresetId: string;
   showPageNumbers: boolean;
   blocks: Block[];
+  /** 输出规格（纸张 + 点距参数 + 各自的手工微调）；缺省时由 normalizeDocument 补齐 */
+  profiles?: OutputProfile[];
+  /** 语义锚点（绑定原文片段 / 稳定图形对象） */
+  anchors?: Anchor[];
   updatedAt: number;
 }
 
@@ -45,7 +55,27 @@ export function emptyDocument(tableFile: string, pagePresetId: string): StudioDo
     pagePresetId,
     showPageNumbers: true,
     blocks: [],
+    profiles: defaultProfiles(pagePresetId),
+    anchors: [],
     updatedAt: Date.now(),
+  };
+}
+
+/**
+ * 迁移/规范化：旧工程（无 profiles/anchors、形状无稳定 ID）打开时补齐。
+ * 形状 ID 一经分配即稳定，锚点可绑定到具体形状对象。
+ */
+export function normalizeDocument(doc: StudioDocument): StudioDocument {
+  const blocks = doc.blocks.map((b) => {
+    if (b.kind !== 'figure') return b;
+    const shapes = b.figure.shapes.map((s, i) => (s.id ? s : { ...s, id: `shape-${b.id}-${i}` }));
+    return { ...b, figure: { ...b.figure, shapes } };
+  });
+  return {
+    ...doc,
+    blocks,
+    profiles: doc.profiles?.length ? doc.profiles : defaultProfiles(doc.pagePresetId),
+    anchors: doc.anchors ?? [],
   };
 }
 

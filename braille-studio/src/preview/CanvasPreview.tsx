@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useRef } from 'react';
 import type { Layout } from '../layout/engine';
 import { layoutToDots } from '../layout/engine';
+import type { LeaderLine } from '../layout/anchors';
 import { cellX, lineY } from '../braille/spec';
 import type { FigureSpec } from '../model/document';
 
 export interface PreviewProps {
   layout: Layout;
   figures: Map<string, FigureSpec>;
+  leaders: LeaderLine[];
   zoom: number;
   showEmptyDots: boolean;
   selectedBlockId: string | null;
@@ -133,6 +135,21 @@ export function CanvasPreview(p: PreviewProps) {
       }
     }
 
+    // 锚点连线（与 PDF 同源）与标注编号（校样标注）
+    for (const ld of p.leaders) {
+      ctx.strokeStyle = '#111';
+      ctx.lineWidth = 0.5 * scale;
+      ctx.beginPath();
+      for (const s of ld.segments) {
+        ctx.moveTo(X(ld.page, s.x1), Y(ld.page, s.y1));
+        ctx.lineTo(X(ld.page, s.x2), Y(ld.page, s.y2));
+      }
+      ctx.stroke();
+      ctx.fillStyle = '#2b6cb0';
+      ctx.font = `${3 * scale}px sans-serif`;
+      ctx.fillText(ld.label, X(ld.page, ld.labelX), Y(ld.page, ld.labelY));
+    }
+
     // 屏幕标注：图注跨页续行提示（不输出到 PDF）
     ctx.fillStyle = '#2b6cb0';
     ctx.font = '11px sans-serif';
@@ -141,7 +158,7 @@ export function CanvasPreview(p: PreviewProps) {
         ctx.fillText('（图注跨页续排）', X(ln.page, 4), Y(ln.page, lineY(geo, ln.line, spec)) - 2);
       }
     }
-  }, [p.layout, dots, p.zoom, p.showEmptyDots, p.selectedBlockId, p.figures, scale, widthPx, heightPx, geo, spec, pageW, pageH]);
+  }, [p.layout, dots, p.zoom, p.showEmptyDots, p.selectedBlockId, p.figures, p.leaders, scale, widthPx, heightPx, geo, spec, pageW, pageH]);
 
   const onClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
     const rect = ref.current!.getBoundingClientRect();

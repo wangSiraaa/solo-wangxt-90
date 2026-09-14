@@ -5,6 +5,7 @@
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import type { Layout } from '../layout/engine';
 import { layoutToDots } from '../layout/engine';
+import type { LeaderLine } from '../layout/anchors';
 import { MM_TO_PT } from '../braille/spec';
 import type { FigureSpec } from '../model/document';
 
@@ -12,13 +13,22 @@ export interface PdfExportInfo {
   title: string;
   tableFile: string;
   liblouisVersion: string;
+  profileLabel?: string;
 }
 
-export async function exportPdf(layout: Layout, figures: Map<string, FigureSpec>, info: PdfExportInfo): Promise<Uint8Array> {
+export async function exportPdf(
+  layout: Layout,
+  figures: Map<string, FigureSpec>,
+  info: PdfExportInfo,
+  leaders: LeaderLine[] = [],
+): Promise<Uint8Array> {
   const { geometry: geo, spec } = layout;
   const pdf = await PDFDocument.create();
   pdf.setTitle(info.title);
-  pdf.setProducer(`braille-studio (liblouis ${info.liblouisVersion}, 表 ${info.tableFile})`);
+  pdf.setProducer(
+    `braille-studio (liblouis ${info.liblouisVersion}, 表 ${info.tableFile}${info.profileLabel ? `, ${info.profileLabel}` : ''})`,
+  );
+  const labelFont = await pdf.embedFont(StandardFonts.Helvetica);
 
   const pageW = geo.preset.widthMm * MM_TO_PT;
   const pageH = geo.preset.heightMm * MM_TO_PT;
@@ -61,6 +71,28 @@ export async function exportPdf(layout: Layout, figures: Map<string, FigureSpec>
         }
       }
     }
+  }
+
+  // 锚点连线（触觉图形，黑色凸线）与标注编号（校样标注，蓝色小字）
+  const leaderW = 0.5 * MM_TO_PT;
+  const proofBlue = rgb(0.17, 0.42, 0.69);
+  for (const ld of leaders) {
+    const page = pages[ld.page];
+    for (const s of ld.segments) {
+      page.drawLine({
+        start: { x: s.x1 * MM_TO_PT, y: toPdfY(s.y1) },
+        end: { x: s.x2 * MM_TO_PT, y: toPdfY(s.y2) },
+        thickness: leaderW,
+        color: ink,
+      });
+    }
+    page.drawText(ld.label, {
+      x: ld.labelX * MM_TO_PT,
+      y: toPdfY(ld.labelY) - 4,
+      size: 6,
+      font: labelFont,
+      color: proofBlue,
+    });
   }
 
   // 元数据注释页不放任何可见内容，保持触读页面纯净

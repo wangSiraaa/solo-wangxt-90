@@ -3,13 +3,13 @@
  * 任何会产生非法图形（含坐标越界）的编辑都被拒绝，不进入文档。
  */
 import type { FigureSpec, Shape } from '../model/document';
-import { validateFigure } from '../model/document';
+import { validateFigure, newId } from '../model/document';
 
 export type ApplyResult = { figure: FigureSpec; error: null } | { figure: null; error: string };
 
 const SHAPE_KINDS = ['line', 'rect', 'circle', 'polyline'];
 
-/** 应用形状 JSON；非法（含越界）时拒绝并返回错误 */
+/** 应用形状 JSON；非法（含越界）时拒绝并返回错误。合法形状的缺失 ID 会被补齐（锚点绑定用） */
 export function applyShapesJson(fig: FigureSpec, json: string): ApplyResult {
   let parsed: unknown;
   try {
@@ -26,7 +26,8 @@ export function applyShapesJson(fig: FigureSpec, json: string): ApplyResult {
       return { figure: null, error: `形状 ${i + 1} 坐标必须是数字数组` };
     }
   }
-  const candidate: FigureSpec = { ...fig, shapes: parsed as Shape[] };
+  const shapes = (parsed as Shape[]).map((s) => (s.id ? s : { ...s, id: `shape-${newId()}` }));
+  const candidate: FigureSpec = { ...fig, shapes };
   const err = validateFigure(candidate);
   return err ? { figure: null, error: err } : { figure: candidate, error: null };
 }

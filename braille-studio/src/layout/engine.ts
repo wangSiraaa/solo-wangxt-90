@@ -76,8 +76,9 @@ export function layoutDocument(
   doc: StudioDocument,
   translate: TranslateFn,
   spec: BrailleSpec = BRAILLE_SPEC,
+  presetId: string = doc.pagePresetId,
 ): Layout {
-  const preset = PAGE_PRESETS.find((p) => p.id === doc.pagePresetId) ?? PAGE_PRESETS[0];
+  const preset = PAGE_PRESETS.find((p) => p.id === presetId) ?? PAGE_PRESETS[0];
   const geo = computeGeometry(preset, spec);
   const lines: PlacedLine[] = [];
   const figures: PlacedFigure[] = [];

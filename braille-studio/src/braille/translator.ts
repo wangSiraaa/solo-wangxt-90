@@ -189,3 +189,31 @@ export function translate(text: string, tableFile: string): Translation {
 export async function getTableSource(tableFile: string): Promise<string> {
   return fetchText(`${TABLE_DIR}/${tableFile}`);
 }
+
+/**
+ * 转译缓存：同一文本 + 同一语言表只转译一次。
+ * 多个输出规格共享转译结果（版面各自独立计算）。
+ */
+export class TranslationCache {
+  private map = new Map<string, Translation>();
+  /** 实际调用 liblouis 的次数（测试与诊断用） */
+  computed = 0;
+
+  get = (text: string, tableFile: string): Translation => {
+    const key = `${tableFile}${text}`;
+    let t = this.map.get(key);
+    if (!t) {
+      t = translate(text, tableFile);
+      this.computed++;
+      this.map.set(key, t);
+    }
+    return t;
+  };
+
+  clear() {
+    this.map.clear();
+    this.computed = 0;
+  }
+}
+
+export const translationCache = new TranslationCache();

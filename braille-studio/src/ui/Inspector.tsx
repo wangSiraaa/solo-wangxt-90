@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { Block } from '../model/document';
+import type { Block, StudioDocument } from '../model/document';
 import type { Layout } from '../layout/engine';
 import { layoutToDots, validateLayout } from '../layout/engine';
+import type { LeaderLine } from '../layout/anchors';
 import type { TranslatorInfo } from '../braille/translator';
 import { getManifest, getTableSource, translate } from '../braille/translator';
 import { raisedDots } from '../braille/dots';
@@ -9,18 +10,30 @@ import { exportPdf } from '../export/pdf';
 import { PDFDocument } from 'pdf-lib';
 import { validateFigure } from '../model/document';
 import type { FigureSpec } from '../model/document';
+import type { OutputProfile } from '../model/profile';
+import type { Resolution } from '../model/anchor';
+import type { ExportRecord } from '../storage/exports';
+import { AnchorsPanel } from './AnchorsPanel';
 
 export interface InspectorProps {
   info: TranslatorInfo;
-  docName: string;
-  tableFile: string;
+  doc: StudioDocument;
+  profile: OutputProfile;
   block: Block | null;
   layout: Layout;
   figures: Map<string, FigureSpec>;
+  leaders: LeaderLine[];
+  leaderViolations: string[];
+  resolutions: Map<string, Resolution>;
+  affected: number[];
+  exports: ExportRecord[];
+  onDocChange(doc: StudioDocument): void;
+  onDeleteExport(id: string): void;
+  onDownloadExport(rec: ExportRecord): void;
   pickedCell: { lineIdx: number; cellIdx: number } | null;
 }
 
-type Tab = 'map' | 'rules' | 'version' | 'check';
+type Tab = 'map' | 'rules' | 'anchors' | 'exports' | 'version' | 'check';
 
 function MappingView({ block, tableFile, pickedCell, layout }: { block: Block | null; tableFile: string; pickedCell: InspectorProps['pickedCell']; layout: Layout }) {
   const text = !block ? '' : block.kind === 'figure' ? block.caption : block.text;
@@ -135,7 +148,23 @@ interface CheckResult {
   detail: string;
 }
 
-function CheckView({ layout, figures, info, docName, tableFile }: { layout: Layout; figures: Map<string, FigureSpec>; info: TranslatorInfo; docName: string; tableFile: string }) {
+function CheckView({
+  layout,
+  figures,
+  info,
+  docName,
+  tableFile,
+  leaders,
+  leaderViolations,
+}: {
+  layout: Layout;
+  figures: Map<string, FigureSpec>;
+  info: TranslatorInfo;
+  docName: string;
+  tableFile: string;
+  leaders: LeaderLine[];
+  leaderViolations: string[];
+}) {
   const [results, setResults] = useState<CheckResult[] | null>(null);
   const [running, setRunning] = useState(false);
 
@@ -160,10 +189,18 @@ function CheckView({ layout, figures, info, docName, tableFile }: { layout: Layo
         ? badFigures.map((x) => `块 ${x.id}: ${x.err}`).join('；')
         : `${figures.size} 个图形的形状均在声明范围内（间距按实际形状包围盒计算）`,
     });
-    // 3. 预览与 PDF 点位一致（同一 layoutToDots 数据源 + 实际导出验证）
+    // 3. 锚点连线不压盲文
+    out.push({
+      name: '锚点连线不压盲文',
+      ok: leaderViolations.length === 0,
+      detail: leaderViolations.length
+        ? leaderViolations.slice(0, 5).join('；')
+        : `${leaders.length} 条连线均与点阵保持安全距离`,
+    });
+    // 4. 预览与 PDF 点位一致（同一 layoutToDots 数据源 + 实际导出验证）
     try {
       const dotsA = layoutToDots(layout);
-      const bytes = await exportPdf(layout, figures, { title: docName, tableFile, liblouisVersion: info.version });
+      const bytes = await exportPdf(layout, figures, { title: docName, tableFile, liblouisVersion: info.version }, leaders);
       const pdf = await PDFDocument.load(bytes);
       const dotsB = layoutToDots(layout);
       const same =
@@ -177,7 +214,7 @@ function CheckView({ layout, figures, info, docName, tableFile }: { layout: Layo
     } catch (e: any) {
       out.push({ name: '预览与 PDF 点位一致', ok: false, detail: `导出失败: ${e.message}` });
     }
-    // 4. 表文件完整性（SHA-256 对照 manifest）
+    // 5. 表文件完整性（SHA-256 对照 manifest）
     try {
       const manifest = await getManifest();
       let allOk = true;
@@ -222,8 +259,30 @@ function CheckView({ layout, figures, info, docName, tableFile }: { layout: Layo
   );
 }
 
+function ExportsView({ exports, onDownload, onDelete }: { exports: ExportRecord[]; onDownload(r: ExportRecord): void; onDelete(id: string): void }) {
+  if (exports.length === 0) return <p className="hint">暂无导出记录。每次导出 PDF 都会在此留存快照，旧版可回看。</p>;
+  return (
+    <div className="exports-view">
+      <p className="hint">每次导出的 PDF 快照（含规格与语言表），旧版导出可回看：</p>
+      {exports.map((r) => (
+        <div key={r.id} className="export-row">
+          <div>
+            <strong>{r.docName}</strong> · {r.profileLabel} · {r.pageCount} 页
+            <div className="hint">
+              {new Date(r.createdAt).toLocaleString()} · 表 {r.tableFile} · {(r.bytes.byteLength / 1024).toFixed(0)} KB
+            </div>
+          </div>
+          <button onClick={() => onDownload(r)}>回看</button>
+          <button onClick={() => onDelete(r.id)}>删除</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 export function Inspector(p: InspectorProps) {
   const [tab, setTab] = useState<Tab>('map');
+  const mismatchCount = [...p.resolutions.values()].filter((r) => r.status === 'mismatch').length;
   return (
     <div className="inspector">
       <div className="tabs">
@@ -231,6 +290,8 @@ export function Inspector(p: InspectorProps) {
           [
             ['map', '原文映射'],
             ['rules', '缩写规则'],
+            ['anchors', mismatchCount ? `锚点 ⚠${mismatchCount}` : '锚点'],
+            ['exports', '导出记录'],
             ['version', '表版本'],
             ['check', '自检'],
           ] as [Tab, string][]
@@ -241,10 +302,24 @@ export function Inspector(p: InspectorProps) {
         ))}
       </div>
       <div className="tab-body">
-        {tab === 'map' && <MappingView block={p.block} tableFile={p.tableFile} pickedCell={p.pickedCell} layout={p.layout} />}
-        {tab === 'rules' && <RulesView tableFile={p.tableFile} />}
+        {tab === 'map' && <MappingView block={p.block} tableFile={p.doc.tableFile} pickedCell={p.pickedCell} layout={p.layout} />}
+        {tab === 'rules' && <RulesView tableFile={p.doc.tableFile} />}
+        {tab === 'anchors' && (
+          <AnchorsPanel doc={p.doc} profile={p.profile} resolutions={p.resolutions} affected={p.affected} onDocChange={p.onDocChange} />
+        )}
+        {tab === 'exports' && <ExportsView exports={p.exports} onDownload={p.onDownloadExport} onDelete={p.onDeleteExport} />}
         {tab === 'version' && <VersionView info={p.info} />}
-        {tab === 'check' && <CheckView layout={p.layout} figures={p.figures} info={p.info} docName={p.docName} tableFile={p.tableFile} />}
+        {tab === 'check' && (
+          <CheckView
+            layout={p.layout}
+            figures={p.figures}
+            info={p.info}
+            docName={p.doc.name}
+            tableFile={p.doc.tableFile}
+            leaders={p.leaders}
+            leaderViolations={p.leaderViolations}
+          />
+        )}
       </div>
     </div>
   );
